@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "faba-bridge"
+version = "0.1.0"
+description = "Local HTTP bridge between Home Assistant and the FABA+ (MyFaba) storytelling box cloud"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = ["requests>=2.31", "pycognito>=2024.5"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.5"]
+
+[project.scripts]
+faba-bridge = "faba_bridge.server:main"
+
+[tool.setuptools.packages.find]
+include = ["faba_bridge*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

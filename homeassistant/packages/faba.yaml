@@ -1,0 +1,145 @@
+# Home Assistant package for the FABA+ storytelling box via faba-bridge.
+# Requires the bridge running on http://127.0.0.1:8090 (see README).
+rest:
+  - resource: http://127.0.0.1:8090/status
+    scan_interval: 30
+    timeout: 60
+    sensor:
+      - name: FABA battery
+        unique_id: faba_battery
+        value_template: "{{ value_json.battery_pct }}"
+        unit_of_measurement: "%"
+        device_class: battery
+        state_class: measurement
+        json_attributes:
+          - battery_mv
+          - battery_level
+          - fw
+          - ip
+          - last_connection
+          - live
+      - name: FABA volume
+        unique_id: faba_volume_sensor
+        value_template: "{{ value_json.volume }}"
+        icon: mdi:volume-high
+        json_attributes:
+          - volume_limit
+      - name: FABA brightness
+        unique_id: faba_brightness_sensor
+        value_template: "{{ value_json.led_brightness }}"
+        unit_of_measurement: "%"
+        icon: mdi:brightness-6
+      - name: FABA night light color
+        unique_id: faba_night_light_color_sensor
+        value_template: "{{ value_json.led_preset or 'unknown' }}"
+        icon: mdi:palette
+        json_attributes:
+          - led_preset_id
+      - name: FABA now playing
+        unique_id: faba_now_playing
+        value_template: "{{ value_json.now_title or 'nothing' }}"
+        icon: mdi:book-open-page-variant
+        json_attributes:
+          - now_tracks
+          - now_status
+          - now_track_idx
+          - now_progress
+          - now_image
+          - last_message
+          - sync_status
+    binary_sensor:
+      - name: FABA online
+        unique_id: faba_online
+        value_template: "{{ value_json.online }}"
+        device_class: connectivity
+
+rest_command:
+  faba_set:
+    url: http://127.0.0.1:8090/set
+    method: POST
+    content_type: application/json
+    payload: "{{ payload }}"
+    timeout: 60
+  faba_off:
+    url: http://127.0.0.1:8090/off
+    method: POST
+    content_type: application/json
+    payload: "{}"
+    timeout: 60
+
+switch:
+  - platform: template
+    switches:
+      faba:
+        # For HomeKit/Siri: "turn off FABA" = forced shutdown. Turning it on is impossible
+        # (an off box has no Wi-Fi), so ON only shows a notification.
+        friendly_name: FABA
+        unique_id: faba_switch
+        value_template: "{{ is_state('binary_sensor.faba_online', 'on') }}"
+        icon_template: mdi:robot-happy
+        turn_on:
+          - action: persistent_notification.create
+            data:
+              notification_id: faba_no_power_on
+              title: FABA
+              message: The FABA cannot be powered on remotely (it is off Wi-Fi while off). Press the grey side button.
+        turn_off:
+          - action: rest_command.faba_off
+          - delay:
+              seconds: 5
+          - action: homeassistant.update_entity
+            target:
+              entity_id: binary_sensor.faba_online
+
+template:
+  - number:
+      - name: FABA night light brightness
+        unique_id: faba_night_light_brightness
+        # Applies live only while the night light is on (oval button); the box never goes below 10.
+        state: "{{ states('sensor.faba_brightness') }}"
+        min: 10
+        max: 100
+        step: 5
+        unit_of_measurement: "%"
+        icon: mdi:brightness-6
+        set_value:
+          - action: rest_command.faba_set
+            data:
+              payload: '{"led_brightness": {{ value | int }}}'
+          - action: homeassistant.update_entity
+            target:
+              entity_id: sensor.faba_brightness
+      - name: FABA volume
+        unique_id: faba_volume
+        state: "{{ states('sensor.faba_volume') }}"
+        min: 0
+        max: 100
+        step: 1
+        icon: mdi:volume-high
+        set_value:
+          - action: rest_command.faba_set
+            data:
+              payload: '{"volume": {{ value | int }}}'
+          - action: homeassistant.update_entity
+            target:
+              entity_id: sensor.faba_volume
+  - select:
+      - name: FABA night light color
+        unique_id: faba_night_light_color
+        icon: mdi:palette
+        state: "{{ states('sensor.faba_night_light_color') }}"
+        options: "{{ ['white', 'red', 'orange', 'yellow', 'green', 'blue', 'lavender', 'purple'] }}"
+        select_option:
+          - action: rest_command.faba_set
+            data:
+              payload: >-
+                {"led_preset_id": {{ ['white', 'red', 'orange', 'yellow', 'green', 'blue', 'lavender', 'purple'].index(option) }}}
+          - action: homeassistant.update_entity
+            target:
+              entity_id: sensor.faba_night_light_color
+  - button:
+      - name: FABA power off
+        unique_id: faba_power_off
+        icon: mdi:power
+        press:
+          - action: rest_command.faba_off
