@@ -131,12 +131,14 @@ class FabaClient:
         session: requests.Session | None = None,
         api_url: str = const.IOT_API_URL,
         timeout: int = 30,
+        retry_delay: float = 1.0,
     ):
         self._token = token_provider
         self.module_id = module_id
         self._session = session or requests.Session()
         self._api = api_url.rstrip("/")
         self._timeout = timeout
+        self._retry_delay = retry_delay
         self._lock = threading.Lock()
 
     def _headers(self) -> dict:
@@ -173,8 +175,23 @@ class FabaClient:
             return self.module_id
 
     def raw_status(self, skip_box_show: bool = False) -> dict:
+        """Cloud-cached status of the box.
+
+        The backend occasionally answers 200 without a ``data`` section (or fails
+        transiently); one retry after a short pause is enough in practice.
+        """
         mid = self.resolve_module_id()
-        return self._get(f"/status/{mid}", params={"skipBoxShow": "true" if skip_box_show else "false"})["data"]
+        params = {"skipBoxShow": "true" if skip_box_show else "false"}
+        last: Exception | None = None
+        for attempt in range(2):
+            try:
+                return self._get(f"/status/{mid}", params=params)["data"]
+            except (KeyError, ValueError, requests.RequestException) as err:
+                last = err
+                log.warning("status read failed (attempt %d/2): %r", attempt + 1, err)
+                if attempt == 0:
+                    time.sleep(self._retry_delay)
+        raise RuntimeError(f"the cloud did not return the box status: {last!r}")
 
     def send_cmd(self, code: int, data: dict | None = None, sync: bool = True) -> dict:
         if code == const.CMD_WS_DEL_CONFIG:

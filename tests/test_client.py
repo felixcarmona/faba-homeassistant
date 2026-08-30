@@ -1,7 +1,9 @@
 import pytest
 
 from faba_bridge import const
-from faba_bridge.client import battery_level, battery_percent, led_preset_name, normalize
+from faba_bridge.client import FabaClient, battery_level, battery_percent, led_preset_name, normalize
+
+from .conftest import FakeResponse, FakeSession
 
 
 def test_battery_percent_is_clamped_and_linear():
@@ -112,3 +114,32 @@ def test_status_falls_back_when_live_read_fails(client, session):
     out = client.status()
     assert out["live"] is False
     assert out["volume"] == 19
+
+
+class _FlakySession(FakeSession):
+    """First status reads come back without ``data`` (as the real cloud sometimes does)."""
+
+    def __init__(self, failures: int):
+        super().__init__()
+        self.failures = failures
+
+    def get(self, url, headers=None, timeout=None, params=None):
+        if "/status/" in url and self.failures > 0:
+            self.failures -= 1
+            self.calls.append(("GET", url, headers, params, None))
+            return FakeResponse({"result": True})
+        return super().get(url, headers=headers, timeout=timeout, params=params)
+
+
+def test_raw_status_retries_once_when_cloud_omits_data():
+    session = _FlakySession(failures=1)
+    client = FabaClient(lambda: "tok", session=session, retry_delay=0)
+    assert client.raw_status()["device"]["online"] is True
+    assert len([c for c in session.calls if "/status/" in c[1]]) == 2
+
+
+def test_raw_status_gives_up_after_two_failures():
+    session = _FlakySession(failures=2)
+    client = FabaClient(lambda: "tok", session=session, retry_delay=0)
+    with pytest.raises(RuntimeError):
+        client.raw_status()

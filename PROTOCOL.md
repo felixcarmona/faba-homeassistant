@@ -84,3 +84,4 @@ Read-only: `status_battery` (mV; `battery_low_th` 340 / `battery_min_th` 330 =
 - Playback is started by the NFC figure only.
 - The Wi-Fi module talks MQTT with the cloud (`mqttClientId`, `mqttTc32` in the
   device record); the device-side channel is not needed for control.
+- `GET /status/{moduleId}` occasionally answers `200` with no `data` section; the client retries once after a short pause (seen in production on 2026-08-30).
