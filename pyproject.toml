@@ -12,7 +12,7 @@ license = { text = "MIT" }
 dependencies = ["requests>=2.31", "pycognito>=2024.5"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.5"]
+dev = ["pytest>=8", "pyyaml>=6", "ruff>=0.5"]
 
 [project.scripts]
 faba-bridge = "faba_bridge.server:main"

@@ -22,6 +22,11 @@ official app does.
 | `switch.faba` | reflects *online*; turning it **off** sends the app's "forced shutdown" |
 | `button.faba_power_off` | forced shutdown |
 
+While the box is powered off the cloud reports no live parameters, so battery,
+volume, brightness and night light colour (and the controls that mirror them)
+show as **unavailable** until it comes back online. `binary_sensor.faba_online`,
+`switch.faba` and `sensor.faba_now_playing` keep working.
+
 Things that are **not** possible (verified against a real box, firmware
 `v2.0-3`):
 

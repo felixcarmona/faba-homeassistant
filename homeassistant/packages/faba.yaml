@@ -1,5 +1,14 @@
 # Home Assistant package for the FABA+ storytelling box via faba-bridge.
 # Requires the bridge running on http://127.0.0.1:8090 (see README).
+#
+# While the box is powered off the cloud reports no live parameters, so the bridge returns null for
+# battery, volume, brightness and night light colour. Every entity fed by one of those fields has
+# an `availability` template: it turns "unavailable" instead of handing Home Assistant a
+# non-numeric 'None' (which raises a ValueError on every poll for sensors with a unit).
+# The guard is `value_json is mapping and value_json.get('<field>') is not none` on purpose: it
+# also covers a missing field (the bridge answers 502 {"error": ...} when the cloud fails) and a
+# non-JSON body. A plain `value_json.<field> is not none` is true for a missing field, and Home
+# Assistant treats an availability template that errors as "available".
 rest:
   - resource: http://127.0.0.1:8090/status
     scan_interval: 30
@@ -8,6 +17,7 @@ rest:
       - name: FABA battery
         unique_id: faba_battery
         value_template: "{{ value_json.battery_pct }}"
+        availability: "{{ value_json is mapping and value_json.get('battery_pct') is not none }}"
         unit_of_measurement: "%"
         device_class: battery
         state_class: measurement
@@ -21,23 +31,29 @@ rest:
       - name: FABA volume
         unique_id: faba_volume_sensor
         value_template: "{{ value_json.volume }}"
+        availability: "{{ value_json is mapping and value_json.get('volume') is not none }}"
         icon: mdi:volume-high
         json_attributes:
           - volume_limit
       - name: FABA brightness
         unique_id: faba_brightness_sensor
         value_template: "{{ value_json.led_brightness }}"
+        availability: "{{ value_json is mapping and value_json.get('led_brightness') is not none }}"
         unit_of_measurement: "%"
         icon: mdi:brightness-6
       - name: FABA night light color
         unique_id: faba_night_light_color_sensor
-        value_template: "{{ value_json.led_preset or 'unknown' }}"
+        value_template: "{{ value_json.led_preset }}"
+        availability: "{{ value_json is mapping and value_json.get('led_preset') is not none }}"
         icon: mdi:palette
         json_attributes:
           - led_preset_id
       - name: FABA now playing
         unique_id: faba_now_playing
         value_template: "{{ value_json.now_title or 'nothing' }}"
+        # now_title stays in the payload while the box is off (last content played); it is only
+        # missing when the bridge could not reach the cloud.
+        availability: "{{ value_json is mapping and 'now_title' in value_json }}"
         icon: mdi:book-open-page-variant
         json_attributes:
           - now_tracks
@@ -51,6 +67,7 @@ rest:
       - name: FABA online
         unique_id: faba_online
         value_template: "{{ value_json.online }}"
+        availability: "{{ value_json is mapping and value_json.get('online') is not none }}"
         device_class: connectivity
 
 rest_command:
@@ -97,6 +114,7 @@ template:
         unique_id: faba_night_light_brightness
         # Applies live only while the night light is on (oval button); the box never goes below 10.
         state: "{{ states('sensor.faba_brightness') }}"
+        availability: "{{ has_value('sensor.faba_brightness') }}"
         min: 10
         max: 100
         step: 5
@@ -112,6 +130,7 @@ template:
       - name: FABA volume
         unique_id: faba_volume
         state: "{{ states('sensor.faba_volume') }}"
+        availability: "{{ has_value('sensor.faba_volume') }}"
         min: 0
         max: 100
         step: 1
@@ -128,6 +147,7 @@ template:
         unique_id: faba_night_light_color
         icon: mdi:palette
         state: "{{ states('sensor.faba_night_light_color') }}"
+        availability: "{{ has_value('sensor.faba_night_light_color') }}"
         options: "{{ ['white', 'red', 'orange', 'yellow', 'green', 'blue', 'lavender', 'purple'] }}"
         select_option:
           - action: rest_command.faba_set
