@@ -84,16 +84,15 @@ rest_command:
     payload: "{}"
     timeout: 60
 
-switch:
-  - platform: template
-    switches:
-      faba:
+template:
+  - switch:
+      # Modern template syntax (the legacy `switch: platform: template` platform was removed in HA 2026.6).
+      - name: FABA
         # For HomeKit/Siri: "turn off FABA" = forced shutdown. Turning it on is impossible
         # (an off box has no Wi-Fi), so ON only shows a notification.
-        friendly_name: FABA
         unique_id: faba_switch
-        value_template: "{{ is_state('binary_sensor.faba_online', 'on') }}"
-        icon_template: mdi:robot-happy
+        state: "{{ is_state('binary_sensor.faba_online', 'on') }}"
+        icon: mdi:robot-happy
         turn_on:
           - action: persistent_notification.create
             data:
@@ -107,8 +106,6 @@ switch:
           - action: homeassistant.update_entity
             target:
               entity_id: binary_sensor.faba_online
-
-template:
   - number:
       - name: FABA night light brightness
         unique_id: faba_night_light_brightness
